@@ -235,6 +235,7 @@ export default function App() {
   const patchPerson = (id, patch) => save({ ...db, people: db.people.map((p)=>p.id===id?{...p,...patch}:p) });
   const patchComp = (id, patch) => save({ ...db, competitors: db.competitors.map((c)=>c.id===id?{...c,...patch}:c) });
   const patchProj = (id, patch) => save({ ...db, projects: db.projects.map((p)=>p.id===id?{...p,...patch}:p) });
+  const patchBriefing = (nextBriefing) => save({ ...db, briefing: nextBriefing });
   const log = (id) => patchPerson(id, { lastVisit: todayStr() });
 
   const addPerson = (type) => { const p = mk("New account", type, type==="nonmsa"?{cad:60,msaStatus:"none"}:type==="target"?{}:{cad:90}); p.id = `${type}_${Date.now()}`; if(type==="target"){p.seg="";p.where="";p.why="";p.who="";p.status="researching";p.priority="high";} save({ ...db, people:[p, ...db.people] }); setOpenId(p.id); };
@@ -302,7 +303,7 @@ export default function App() {
       <div style={{ maxWidth:1100, margin:"0 auto", padding:16, paddingBottom:80 }}>
         {tab==="today" && <Today needSee={needSee} soon={soon} hot={hotProjects} onOpen={(id,t)=>{setTab(t);setOpenId(id);}} onLog={log} />}
 
-        {tab==="briefing" && <Briefing b={db.briefing} />}
+        {tab==="briefing" && <Briefing b={db.briefing} onSave={patchBriefing} />}
 
         {tab==="routes" && <ByArea people={db.people} onOpen={(id)=>setOpenId(id)} onLog={log} />}
 
@@ -366,8 +367,36 @@ function Today({ needSee, soon, hot, onOpen, onLog }) {
 }
 
 // ---------- BRIEFING ----------
-function Briefing({ b }) {
+function Briefing({ b, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(null);
+
   if (!b) return <div style={{ color:C.dim }}>No briefing yet.</div>;
+
+  const startEdit = () => {
+    setDraft({
+      date: b.date || todayStr(),
+      nudge: b.nudge || "",
+      pulse: (b.pulse||[]).join("\n"),
+      moving: (b.moving||[]).join("\n"),
+      accounts: (b.accounts||[]).join("\n"),
+    });
+    setEditing(true);
+  };
+  const cancel = () => { setEditing(false); setDraft(null); };
+  const submit = () => {
+    const toList = (s) => s.split("\n").map(x=>x.trim()).filter(Boolean);
+    onSave({
+      date: draft.date,
+      nudge: draft.nudge.trim(),
+      pulse: toList(draft.pulse),
+      moving: toList(draft.moving),
+      accounts: toList(draft.accounts),
+    });
+    setEditing(false);
+    setDraft(null);
+  };
+
   const Block = ({ title, items, c }) => (
     <div style={{ marginBottom:20 }}>
       <Sub c={c}>{title}</Sub>
@@ -378,11 +407,46 @@ function Briefing({ b }) {
       </div>
     </div>
   );
+
+  if (editing) {
+    return (
+      <div>
+        <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:6 }}>
+          <H>Edit Briefing</H>
+          <input className="fld" type="date" value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})} style={{ width:170 }} />
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <div className="lbl">Do one thing today</div>
+          <textarea className="fld" rows={2} value={draft.nudge} onChange={e=>setDraft({...draft,nudge:e.target.value})} />
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <div className="lbl">Basin pulse — one line per point</div>
+          <textarea className="fld" rows={5} value={draft.pulse} onChange={e=>setDraft({...draft,pulse:e.target.value})} placeholder="Paste each bullet on its own line…" />
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <div className="lbl">Work moving — one line per point</div>
+          <textarea className="fld" rows={5} value={draft.moving} onChange={e=>setDraft({...draft,moving:e.target.value})} />
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <div className="lbl">Your accounts — one line per point</div>
+          <textarea className="fld" rows={4} value={draft.accounts} onChange={e=>setDraft({...draft,accounts:e.target.value})} />
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button className="btn p" onClick={submit}>Save briefing</button>
+          <button className="btn" onClick={cancel}>Cancel</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:6 }}>
         <H>Daily Briefing</H>
-        <div style={{ fontSize:12.5, color:C.dim }}>as of {fmt(b.date)}</div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ fontSize:12.5, color:C.dim }}>as of {fmt(b.date)}</div>
+          <button className="btn" onClick={startEdit}>Edit</button>
+        </div>
       </div>
 
       <div className="card" style={{ padding:"14px 16px", borderLeft:`4px solid ${C.rust}`, marginBottom:22, background:C.panel2 }}>
@@ -395,7 +459,7 @@ function Briefing({ b }) {
       <Block title="Your accounts" items={b.accounts} c={C.green} />
 
       <div style={{ fontSize:12, color:C.dim, marginTop:6, lineHeight:1.5, borderTop:`1px solid ${C.lineSolid}`, paddingTop:12 }}>
-        This briefing is a saved snapshot. To refresh it, open your HARMAC Command Center chat and say <b style={{color:C.caliche}}>"run today's brief."</b> Claude pulls fresh basin news, permits, and account moves, then gives you updated text to drop in here.
+        To refresh: open your HARMAC chat and say <b style={{color:C.caliche}}>"give me today's brief."</b> Copy what Claude gives you into <b style={{color:C.caliche}}>Edit</b> above — one line per bullet — then Save. Syncs to every device.
       </div>
     </div>
   );
@@ -835,3 +899,4 @@ const VisitRow = ({p,onOpen,onLog}) => (
     <button className="btn" onClick={onLog}>Visited</button>
   </div>
 );
+
