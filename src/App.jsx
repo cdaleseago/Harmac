@@ -925,11 +925,18 @@ const RegionPicker = ({ value, onChange }) => {
 const Splash = () => <div style={{ background:C.bg, minHeight:"100vh", display:"grid", placeItems:"center", gap:0 }}><div style={{ textAlign:"center" }}><img src={LOGO} alt="HARMAC Energy" style={{ height:70, width:"auto", marginBottom:16, opacity:.95 }} /><div style={{ color:C.dim, fontFamily:"monospace", fontSize:13, letterSpacing:".1em" }}>COMMAND CENTER</div></div></div>;
 
 // ---------- PIN keypad shared by lock screen + admin gate ----------
-function PinPad({ title, subtitle, onSubmit, error }) {
+function PinPad({ title, subtitle, onSubmit, error, pinLength = 4 }) {
   const [val, setVal] = useState("");
-  const press = (d) => { if (val.length < 6) setVal(val + d); };
+  const press = (d) => {
+    if (val.length >= pinLength) return;
+    const next = val + d;
+    setVal(next);
+    if (next.length === pinLength) {
+      onSubmit(next);
+      setVal("");
+    }
+  };
   const back = () => setVal(val.slice(0, -1));
-  const submit = () => { if (val.length) { onSubmit(val); setVal(""); } };
   return (
     <div style={{ background:C.bg, minHeight:"100vh", display:"grid", placeItems:"center", padding:20 }}>
       <div style={{ textAlign:"center", width:"100%", maxWidth:320 }}>
@@ -937,8 +944,8 @@ function PinPad({ title, subtitle, onSubmit, error }) {
         <div style={{ color:C.text, fontSize:17, fontWeight:800, marginBottom:4 }}>{title}</div>
         {subtitle && <div style={{ color:C.dim, fontSize:13, marginBottom:18 }}>{subtitle}</div>}
         <div style={{ display:"flex", justifyContent:"center", gap:10, marginBottom:22 }}>
-          {Array.from({length:6}).map((_,i)=>(
-            <div key={i} style={{ width:14, height:14, borderRadius:8, border:`2px solid ${C.lineSolid}`,
+          {Array.from({length:pinLength}).map((_,i)=>(
+            <div key={i} style={{ width:16, height:16, borderRadius:9, border:`2px solid ${C.lineSolid}`,
               background: i<val.length ? C.rust : "transparent", borderColor: i<val.length?C.rust:C.lineSolid }} />
           ))}
         </div>
@@ -947,9 +954,9 @@ function PinPad({ title, subtitle, onSubmit, error }) {
           {["1","2","3","4","5","6","7","8","9"].map(d=>(
             <button key={d} className="btn" onClick={()=>press(d)} style={{ fontSize:20, padding:"16px 0" }}>{d}</button>
           ))}
-          <button className="btn" onClick={back} style={{ fontSize:14, padding:"16px 0" }}>⌫</button>
+          <div />
           <button className="btn" onClick={()=>press("0")} style={{ fontSize:20, padding:"16px 0" }}>0</button>
-          <button className="btn p" onClick={submit} style={{ fontSize:14, padding:"16px 0" }}>Go</button>
+          <button className="btn" onClick={back} style={{ fontSize:14, padding:"16px 0" }}>⌫</button>
         </div>
       </div>
     </div>
@@ -962,7 +969,7 @@ function LockScreen({ correctPin, onUnlock }) {
     if (val === correctPin) { setError(""); onUnlock(); }
     else setError("Wrong PIN — try again.");
   };
-  return <PinPad title="Enter PIN" subtitle="HARMAC Command Center is locked" onSubmit={check} error={error} />;
+  return <PinPad title="Enter PIN" subtitle="HARMAC Command Center is locked" onSubmit={check} error={error} pinLength={(correctPin||"1234").length} />;
 }
 
 function AdminGate({ correctPin, onUnlock }) {
@@ -973,7 +980,7 @@ function AdminGate({ correctPin, onUnlock }) {
   };
   return (
     <div style={{ maxWidth:340, margin:"40px auto" }}>
-      <PinPad title="Admin PIN" subtitle="Enter the admin PIN to manage settings" onSubmit={check} error={error} />
+      <PinPad title="Admin PIN" subtitle="Enter the admin PIN to manage settings" onSubmit={check} error={error} pinLength={(correctPin||"9999").length} />
     </div>
   );
 }
