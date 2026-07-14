@@ -88,6 +88,20 @@ const COMPETITORS = [
   jobs: [], // {id,name,customer,start,end,source}
 }));
 
+// ---------- seed: watch list (national/bigger-tier players — occasional big-bid
+// crossover, not day-to-day competitors. Just keeping a pulse on the industry.) ----------
+const WATCHLIST = [
+  { name: "Strike, LLC", note: "National-tier pipeline contractor. Bigger pipe, bigger jobs — occasional crossover on large bids." },
+  { name: "Primoris Services Corporation", note: "National-tier oil & gas / pipeline construction. Big-league scale." },
+  { name: "MasTec Energy Labs", note: "National infrastructure contractor, broad energy scope." },
+  { name: "Price Gregory Services", note: "Large-diameter pipeline, operates via Quanta Services." },
+  { name: "Mears Group", note: "National-tier pipeline/utility construction." },
+  { name: "WHC Energy Services", note: "Energy infrastructure contractor, bigger-tier work." },
+  { name: "Brawley Services", note: "East Texas/Haynesville crossover — activity level unconfirmed, worth a look." },
+  { name: "Primetime Services", note: "Activity level unconfirmed, worth a look." },
+  { name: "Troy Construction", note: "One of the biggest players in the game — Cory has worked for them many times. Big-league scale, not a head-to-head daily bidder but a major national name to keep close tabs on." },
+].map((w, i) => ({ id: `watch_${i}`, type: "watchlist", name: w.name, notes: w.note }));
+
 // ---------- seed: market projects (pre-loaded from research) ----------
 const PROJECTS = [
   { name: "Blackcomb Pipeline", owner: "WhiteWater Midstream", kind: "Pipeline",
@@ -148,6 +162,7 @@ const BRIEFING = {
 const SEED = {
   people: [...MSA, ...NONMSA, ...TARGETS],
   competitors: COMPETITORS,
+  watchlist: WATCHLIST,
   projects: PROJECTS,
   briefing: BRIEFING,
 };
@@ -219,7 +234,7 @@ export default function App() {
         const r = await cloudStore.get(STORE_KEY);
         if (r && r.value) {
           const d = JSON.parse(r.value);
-          setDb({ people:d.people||[], competitors:d.competitors||[], projects:d.projects||[], briefing:d.briefing||BRIEFING });
+          setDb({ people:d.people||[], competitors:d.competitors||[], watchlist:d.watchlist||WATCHLIST, projects:d.projects||[], briefing:d.briefing||BRIEFING });
         } else {
           setDb(SEED);
           await cloudStore.set(STORE_KEY, JSON.stringify(SEED));
@@ -228,7 +243,7 @@ export default function App() {
         unsub = subscribe(STORE_KEY, (value) => {
           try {
             const d = JSON.parse(value);
-            setDb({ people:d.people||[], competitors:d.competitors||[], projects:d.projects||[], briefing:d.briefing||BRIEFING });
+            setDb({ people:d.people||[], competitors:d.competitors||[], watchlist:d.watchlist||WATCHLIST, projects:d.projects||[], briefing:d.briefing||BRIEFING });
           } catch {}
         });
       } catch (e) {
@@ -268,12 +283,14 @@ export default function App() {
   const save = async (next) => { setDb(next); try { await cloudStore.set(STORE_KEY, JSON.stringify(next)); } catch (e) { console.error("Save failed:", e); } };
   const patchPerson = (id, patch) => save({ ...db, people: db.people.map((p)=>p.id===id?{...p,...patch}:p) });
   const patchComp = (id, patch) => save({ ...db, competitors: db.competitors.map((c)=>c.id===id?{...c,...patch}:c) });
+  const patchWatch = (id, patch) => save({ ...db, watchlist: (db.watchlist||[]).map((w)=>w.id===id?{...w,...patch}:w) });
   const patchProj = (id, patch) => save({ ...db, projects: db.projects.map((p)=>p.id===id?{...p,...patch}:p) });
   const patchBriefing = (nextBriefing) => save({ ...db, briefing: nextBriefing });
   const log = (id) => patchPerson(id, { lastVisit: todayStr() });
 
   const addPerson = (type) => { const p = mk("New account", type, type==="nonmsa"?{cad:60,msaStatus:"none"}:type==="target"?{}:{cad:90}); p.id = `${type}_${Date.now()}`; if(type==="target"){p.seg="";p.where="";p.why="";p.who="";p.status="researching";p.priority="high";} save({ ...db, people:[p, ...db.people] }); setOpenId(p.id); };
   const addComp = () => { const c = { id:`comp_${Date.now()}`, type:"competitor", name:"New competitor", notes:"", jobs:[] }; save({ ...db, competitors:[c, ...db.competitors] }); setOpenId(c.id); };
+  const addWatch = () => { const w = { id:`watch_${Date.now()}`, type:"watchlist", name:"New name", notes:"" }; save({ ...db, watchlist:[w, ...(db.watchlist||[])] }); setOpenId(w.id); };
   const addProj = () => { const p = { id:`proj_${Date.now()}`, type:"project", name:"New project", owner:"", kind:"Pipeline", where:"", bid:"", start:"", end:"", status:"planned", note:"", sig:"warm", contacts:[] }; save({ ...db, projects:[p, ...db.projects] }); setOpenId(p.id); };
   const del = (id) => { save({ ...db, people:db.people.filter(p=>p.id!==id), competitors:db.competitors.filter(c=>c.id!==id), projects:db.projects.filter(p=>p.id!==id) }); setOpenId(null); };
 
@@ -297,6 +314,7 @@ export default function App() {
     ["targets",`Targets`],
     ["projects",`Work`],
     ["competitors",`Competition`],
+    ["watchlist","Watch List"],
     ["admin","Admin"],
   ];
 
@@ -350,6 +368,8 @@ export default function App() {
         {tab==="projects" && <Work projects={db.projects} openId={openId} setOpenId={setOpenId} onAdd={addProj} q={q} setQ={setQ} />}
 
         {tab==="competitors" && <Competition comps={db.competitors} openId={openId} setOpenId={setOpenId} onAdd={addComp} />}
+
+        {tab==="watchlist" && <WatchList list={db.watchlist||[]} openId={openId} setOpenId={setOpenId} onAdd={addWatch} onPatch={patchWatch} />}
 
         {tab==="admin" && (
           adminUnlocked
@@ -690,7 +710,46 @@ function Competition({ comps, openId, setOpenId, onAdd }) {
   );
 }
 
-// ---------- DETAIL SHEET ----------
+// ---------- WATCH LIST (bigger/national players — occasional big-bid crossover,
+// not day-to-day competitors. Keeping a pulse on the wider industry.) ----------
+function WatchList({ list, openId, setOpenId, onAdd, onPatch }) {
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ fontSize:13, color:C.dim, maxWidth:560 }}>
+          Bigger-tier / national players — not your regular head-to-head bidders, but
+          worth a pulse on. Might cross paths on a big job now and then.
+        </div>
+        <button className="btn" onClick={onAdd}>+ Add</button>
+      </div>
+      <div style={{ display:"grid", gap:8 }}>
+        {list.map(w=>(
+          <div key={w.id} className="card" style={{ padding:"12px 14px" }}>
+            <div onClick={()=>setOpenId(openId===w.id?null:w.id)} style={{ cursor:"pointer" }}>
+              <div style={{ fontWeight:700 }}>{w.name}</div>
+              {w.notes && <div style={{ fontSize:12.5, color:C.dim, marginTop:2 }}>{w.notes}</div>}
+            </div>
+            {openId===w.id && (
+              <div style={{ marginTop:10, paddingTop:10, borderTop:`1px solid ${C.lineSolid}`, display:"grid", gap:8 }}>
+                <div>
+                  <div className="lbl">Name</div>
+                  <input className="fld" value={w.name} onChange={e=>onPatch(w.id,{name:e.target.value})} />
+                </div>
+                <div>
+                  <div className="lbl">Notes</div>
+                  <textarea className="fld" rows={2} value={w.notes||""} onChange={e=>onPatch(w.id,{notes:e.target.value})} placeholder="What you're hearing, recent jobs, anything worth remembering…" />
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {list.length===0 && <Empty onAdd={onAdd} />}
+      </div>
+    </div>
+  );
+}
+
+
 function Sheet({ obj, onClose, onPatch, onLog, onDelete }) {
   return (
     <>
@@ -1057,3 +1116,4 @@ const VisitRow = ({p,onOpen,onLog}) => (
     <button className="btn" onClick={onLog}>Visited</button>
   </div>
 );
+
